@@ -1,196 +1,227 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { Calendar } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { TaskForm } from "@/components/task-form"
-import { TaskList } from "@/components/task-list"
-import { GoogleAuthButton } from "@/components/google-auth-button"
-import { BulkTaskImport } from "@/components/bulk-task-import"
-import { useToast } from "@/hooks/use-toast"
+import { useState, useEffect } from "react";
+import { useSession } from "next-auth/react"; // << IMPORTANTE
+import { Calendar as CalendarIconLucide } from "lucide-react"; // Renombrar para evitar conflicto
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList } from "@/components/ui/tabs";
+import { TaskForm } from "@/components/task-form";
+import { TaskList } from "@/components/task-list";
+import { GoogleAuthButton } from "@/components/google-auth-button";
+import { BulkTaskImport } from "@/components/bulk-task-import";
+import { useToast } from "@/hooks/use-toast";
 
 export type Task = {
-  id: string
-  title: string
-  description?: string
-  duration: number // en minutos
-  breakAfter: number // en minutos
-  date: string
-  startTime: string
-  synced?: boolean
-  calendarId?: string // ID del calendario al que pertenece la tarea
-}
+   // ... (tu tipo Task existente, considera añadir googleEventId)
+   id: string;
+   title: string;
+   description?: string;
+   duration: number;
+   breakAfter: number;
+   date: string;
+   startTime: string;
+   synced?: boolean;
+   calendarId?: string;
+   googleEventId?: string; // Para almacenar el ID del evento de Google
+};
 
 export function TaskManager() {
-  const [tasks, setTasks] = useState<Task[]>([])
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [defaultBreakTime, setDefaultBreakTime] = useState(15) // Tiempo de descanso predeterminado en minutos
-  const { toast } = useToast()
+   const { data: session, status } = useSession(); // << OBTENER SESIÓN
+   const [tasks, setTasks] = useState<Task[]>([]);
+   const [defaultBreakTime, setDefaultBreakTime] = useState(15);
+   const { toast } = useToast();
+   const [isSyncing, setIsSyncing] = useState(false);
 
-  // Cargar tareas del almacenamiento local al iniciar
-  useEffect(() => {
-    const savedTasks = localStorage.getItem("tasks")
-    if (savedTasks) {
-      setTasks(JSON.parse(savedTasks))
-    }
+   // Derivar isAuthenticated de la sesión
+   const isAuthenticated = status === "authenticated";
 
-    const savedBreakTime = localStorage.getItem("defaultBreakTime")
-    if (savedBreakTime) {
-      setDefaultBreakTime(Number.parseInt(savedBreakTime))
-    }
-  }, [])
+   // Efecto para mostrar toast de bienvenida o error de sesión
+   useEffect(() => {
+      if (status === "authenticated" && session?.user) {
+         // Evitar toasts repetidos si el componente se re-renderiza mucho
+         // Podrías usar una bandera de "bienvenida mostrada" si es necesario
+      } else if (status === "unauthenticated" && session?.error === "RefreshAccessTokenError") {
+         toast({
+            title: "Sesión Expirada",
+            description: "Por favor, inicia sesión de nuevo para continuar.",
+            variant: "destructive",
+         });
+      }
+   }, [status, session, toast]);
 
-  // Guardar tareas en el almacenamiento local cuando cambian
-  useEffect(() => {
-    localStorage.setItem("tasks", JSON.stringify(tasks))
-  }, [tasks])
+   // ... (tus useEffects para localStorage permanecen igual) ...
+   useEffect(() => {
+      /* ... */
+   }, []);
+   useEffect(() => {
+      /* ... */
+   }, [tasks]);
+   useEffect(() => {
+      /* ... */
+   }, [defaultBreakTime]);
 
-  // Guardar tiempo de descanso predeterminado
-  useEffect(() => {
-    localStorage.setItem("defaultBreakTime", defaultBreakTime.toString())
-  }, [defaultBreakTime])
+   const addTask = (taskData: Omit<Task, "id" | "synced" | "googleEventId">) => {
+      /* ... tu lógica ... */
+   };
+   const addBulkTasks = (newTasksData: Omit<Task, "id" | "synced" | "googleEventId">[]) => {
+      /* ... tu lógica ... */
+   };
+   const removeTask = (id: string) => {
+      // TODO: Si la tarea tiene `googleEventId`, ofrecer eliminarla de Google Calendar
+      setTasks(tasks.filter((task) => task.id !== id));
+      toast({ title: "Tarea eliminada" /* ... */ });
+   };
 
-  const addTask = (task: Omit<Task, "id" | "synced">) => {
-    const newTask: Task = {
-      ...task,
-      id: Date.now().toString(),
-      synced: false,
-    }
-    setTasks([...tasks, newTask])
-    toast({
-      title: "Tarea agregada",
-      description: "La tarea se ha agregado correctamente.",
-    })
-  }
+   // FUNCIÓN CENTRAL PARA SINCRONIZAR TAREAS CON GOOGLE CALENDAR
+   const syncTasksToCalendar = async (tasksToSync: Task[]) => {
+      if (!isAuthenticated) {
+         toast({ title: "No Autenticado", description: "Inicia sesión con Google.", variant: "destructive" });
+         return { successCount: 0, errorCount: tasksToSync.length, results: [] };
+      }
+      if (tasksToSync.length === 0) {
+         toast({ title: "Nada que sincronizar", description: "No hay tareas nuevas o modificadas." });
+         return { successCount: 0, errorCount: 0, results: [] };
+      }
 
-  const addBulkTasks = (newTasks: Omit<Task, "id" | "synced">[]) => {
-    const tasksWithIds = newTasks.map((task) => ({
-      ...task,
-      id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
-      synced: false,
-    }))
+      setIsSyncing(true);
+      let successCount = 0;
+      const results = [];
 
-    setTasks([...tasks, ...tasksWithIds])
-    toast({
-      title: "Tareas importadas",
-      description: `Se han importado ${newTasks.length} tareas correctamente.`,
-    })
-  }
+      // Mapear Task a formato de evento de Google Calendar API
+      const eventsForAPI = tasksToSync.map((task) => {
+         const [year, month, day] = task.date.split("-").map(Number);
+         const [hours, minutes] = task.startTime.split(":").map(Number);
+         const startDate = new Date(Date.UTC(year, month - 1, day, hours, minutes)); // Usar UTC para evitar problemas de zona horaria en cliente
+         const endDate = new Date(startDate.getTime() + task.duration * 60000);
+         const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone; // O una opción configurable
 
-  const removeTask = (id: string) => {
-    setTasks(tasks.filter((task) => task.id !== id))
-    toast({
-      title: "Tarea eliminada",
-      description: "La tarea se ha eliminado correctamente.",
-    })
-  }
+         return {
+            localId: task.id, // Para actualizar la tarea local después
+            summary: task.title,
+            description: task.description,
+            start: { dateTime: startDate.toISOString(), timeZone },
+            end: { dateTime: endDate.toISOString(), timeZone },
+            calendarId: task.calendarId || "primary", // Usar el calendarId de la tarea o 'primary'
+            // googleEventId: task.googleEventId // Para actualizar eventos existentes (más complejo)
+         };
+      });
 
-  const syncWithCalendar = async () => {
-    if (!isAuthenticated) {
-      toast({
-        title: "No autenticado",
-        description: "Debes iniciar sesión con Google primero.",
-        variant: "destructive",
-      })
-      return
-    }
+      try {
+         const response = await fetch("/api/google-calendar/create-events", {
+            // API que crearemos
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ events: eventsForAPI }),
+         });
 
-    try {
-      // Aquí iría la lógica para sincronizar con Google Calendar
-      // Usando la API de Google Calendar
+         const apiResult = await response.json();
 
-      // Simulación de sincronización exitosa
-      setTasks(tasks.map((task) => ({ ...task, synced: true })))
+         if (!response.ok) {
+            throw new Error(apiResult.message || "Error en la API de creación de eventos.");
+         }
 
-      toast({
-        title: "Sincronización exitosa",
-        description: "Todas las tareas han sido sincronizadas con Google Calendar.",
-      })
-    } catch (error) {
-      toast({
-        title: "Error de sincronización",
-        description: "No se pudieron sincronizar las tareas con Google Calendar.",
-        variant: "destructive",
-      })
-    }
-  }
+         // Actualizar estado local de las tareas
+         setTasks((prevTasks) =>
+            prevTasks.map((localTask) => {
+               const syncedEvent = apiResult.results?.find((r: any) => r.localId === localTask.id && r.success);
+               if (syncedEvent) {
+                  successCount++;
+                  return { ...localTask, synced: true, googleEventId: syncedEvent.eventId };
+               }
+               return localTask;
+            })
+         );
+         results.push(...apiResult.results);
 
-  const handleAuthSuccess = () => {
-    setIsAuthenticated(true)
-    toast({
-      title: "Autenticación exitosa",
-      description: "Has iniciado sesión con Google correctamente.",
-    })
-  }
+         if (successCount > 0) {
+            toast({ title: "Sincronización Exitosa", description: `${successCount} tarea(s) sincronizada(s).` });
+         }
+         if (apiResult.createdCount === 0 && apiResult.results.some((r: any) => !r.success)) {
+            toast({
+               title: "Error de Sincronización",
+               description: "Algunas tareas no pudieron sincronizarse. Revisa detalles.",
+               variant: "destructive",
+            });
+         }
+      } catch (error: any) {
+         console.error("Error al sincronizar:", error);
+         toast({ title: "Error de Sincronización", description: error.message, variant: "destructive" });
+      } finally {
+         setIsSyncing(false);
+      }
+      return { successCount, errorCount: tasksToSync.length - successCount, results };
+   };
 
-  const updateDefaultBreakTime = (minutes: number) => {
-    setDefaultBreakTime(minutes)
-    toast({
-      title: "Tiempo de descanso actualizado",
-      description: `El tiempo de descanso predeterminado se ha establecido en ${minutes} minutos.`,
-    })
-  }
+   // Botón de sincronización general
+   const handleGeneralSync = () => {
+      const unsyncedTasks = tasks.filter((task) => !task.synced && !task.googleEventId);
+      syncTasksToCalendar(unsyncedTasks);
+   };
 
-  return (
-    <Tabs defaultValue="tasks">
-      <TabsList className="grid w-full grid-cols-3 mb-6">
-        <TabsTrigger value="tasks">Mis Tareas</TabsTrigger>
-        <TabsTrigger value="add">Agregar Tarea</TabsTrigger>
-        <TabsTrigger value="import">Importar Tareas</TabsTrigger>
-      </TabsList>
+   const updateDefaultBreakTime = (minutes: number) => {
+      /* ... tu lógica ... */
+   };
 
-      <TabsContent value="tasks">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex justify-between items-center">
-              <span>Tareas Programadas</span>
-              <div className="flex gap-2">
-                <GoogleAuthButton onAuthSuccess={handleAuthSuccess} isAuthenticated={isAuthenticated} />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={syncWithCalendar}
-                  disabled={!isAuthenticated || tasks.length === 0}
-                >
-                  <Calendar className="h-4 w-4 mr-2" />
-                  Sincronizar con Calendar
-                </Button>
-              </div>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <TaskList tasks={tasks} onRemoveTask={removeTask} />
-          </CardContent>
-        </Card>
-      </TabsContent>
+   if (status === "loading") {
+      return <div className="flex justify-center items-center min-h-screen">Cargando Planificador...</div>;
+   }
 
-      <TabsContent value="add">
-        <Card>
-          <CardHeader>
-            <CardTitle>Agregar Nueva Tarea</CardTitle>
-          </CardHeader>
-          <CardContent>
+   return (
+      <Tabs defaultValue="tasks">
+         <TabsList className="grid w-full grid-cols-3 mb-6">{/* ... Tus TabsTriggers ... */}</TabsList>
+
+         <TabsContent value="tasks">
+            <Card>
+               <CardHeader>
+                  <CardTitle className="flex justify-between items-center">
+                     <span>Tareas Programadas</span>
+                     <div className="flex gap-2 items-center">
+                        <GoogleAuthButton /> {/* Ya no necesita props */}
+                        {isAuthenticated && tasks.length > 0 && (
+                           <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={handleGeneralSync}
+                              disabled={isSyncing || tasks.filter((t) => !t.synced && !t.googleEventId).length === 0}
+                           >
+                              <CalendarIconLucide className="h-4 w-4 mr-2" />
+                              {isSyncing
+                                 ? "Sincronizando..."
+                                 : `Sincronizar (${tasks.filter((t) => !t.synced && !t.googleEventId).length})`}
+                           </Button>
+                        )}
+                     </div>
+                  </CardTitle>
+               </CardHeader>
+               <CardContent>
+                  <TaskList tasks={tasks} onRemoveTask={removeTask} />
+               </CardContent>
+            </Card>
+         </TabsContent>
+
+         <TabsContent value="add">
+            {/* ... Tu TaskForm ... */}
+            {/* TaskForm también necesitará la lista de calendarios y `isAuthenticated` si quieres que se preseleccione */}
             <TaskForm onAddTask={addTask} defaultBreakTime={defaultBreakTime} />
-          </CardContent>
-        </Card>
-      </TabsContent>
+         </TabsContent>
 
-      <TabsContent value="import">
-        <Card>
-          <CardHeader>
-            <CardTitle>Importar Tareas desde Texto</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <BulkTaskImport
-              onImportTasks={addBulkTasks}
-              defaultBreakTime={defaultBreakTime}
-              onUpdateDefaultBreakTime={updateDefaultBreakTime}
-            />
-          </CardContent>
-        </Card>
-      </TabsContent>
-    </Tabs>
-  )
+         <TabsContent value="import">
+            <Card>
+               <CardHeader>
+                  <CardTitle>Importar Tareas desde Texto</CardTitle>
+               </CardHeader>
+               <CardContent>
+                  <BulkTaskImport
+                     // En lugar de onImportTasks, pasaremos la función de sincronización
+                     onProcessAndSyncTasks={syncTasksToCalendar} // Nueva prop
+                     isAuthenticated={isAuthenticated} // Pasar estado de autenticación
+                     defaultBreakTime={defaultBreakTime}
+                     onUpdateDefaultBreakTime={updateDefaultBreakTime}
+                  />
+               </CardContent>
+            </Card>
+         </TabsContent>
+      </Tabs>
+   );
 }

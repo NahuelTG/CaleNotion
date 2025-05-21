@@ -1,52 +1,41 @@
-import { type NextRequest, NextResponse } from "next/server"
+// app/api/google-calendar/list-calendars/route.ts
+import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route"; // Ajusta la ruta
+import { google } from "googleapis";
 
-// Esta es una implementación simulada de la API de Google Calendar
-// En una implementación real, usarías la API de Google Calendar
+export async function GET() {
+   const session = await getServerSession(authOptions);
 
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json()
+   if (!session || !session.accessToken) {
+      return NextResponse.json({ message: "No autorizado." }, { status: 401 });
+   }
 
-    // Aquí iría la lógica para crear eventos en Google Calendar
-    // usando la API de Google Calendar
+   try {
+      const oauth2Client = new google.auth.OAuth2();
+      oauth2Client.setCredentials({ access_token: session.accessToken });
 
-    return NextResponse.json({
-      success: true,
-      message: "Eventos creados exitosamente",
-      eventIds: ["event1", "event2", "event3"],
-    })
-  } catch (error) {
-    return NextResponse.json({ success: false, message: "Error al crear eventos" }, { status: 400 })
-  }
-}
+      const calendar = google.calendar({ version: "v3", auth: oauth2Client });
+      const response = await calendar.calendarList.list({ minAccessRole: "writer" }); // Solo calendarios donde se puede escribir
 
-export async function PUT(request: NextRequest) {
-  try {
-    const body = await request.json()
+      const calendars =
+         response.data.items?.map((cal) => ({
+            id: cal.id!,
+            summary: cal.summaryOverride || cal.summary!, // summaryOverride si existe, sino summary
+            backgroundColor: cal.backgroundColor!,
+            primary: cal.primary || false,
+         })) || [];
 
-    // Aquí iría la lógica para actualizar eventos en Google Calendar
-
-    return NextResponse.json({
-      success: true,
-      message: "Eventos actualizados exitosamente",
-    })
-  } catch (error) {
-    return NextResponse.json({ success: false, message: "Error al actualizar eventos" }, { status: 400 })
-  }
-}
-
-export async function DELETE(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url)
-    const eventId = searchParams.get("eventId")
-
-    // Aquí iría la lógica para eliminar un evento de Google Calendar
-
-    return NextResponse.json({
-      success: true,
-      message: "Evento eliminado exitosamente",
-    })
-  } catch (error) {
-    return NextResponse.json({ success: false, message: "Error al eliminar el evento" }, { status: 400 })
-  }
+      return NextResponse.json({ calendars }, { status: 200 });
+   } catch (error: any) {
+      console.error("Error fetching calendar list:", error.response?.data || error.message);
+      // Manejar errores específicos, ej. token expirado
+      if (error.code === 401 || session.error === "RefreshAccessTokenError" || session.error === "NoRefreshTokenOrRefreshFailed") {
+         return NextResponse.json(
+            { message: "Token inválido o sesión expirada. Por favor, re-autentica.", errorType: "AuthError" },
+            { status: 401 }
+         );
+      }
+      return NextResponse.json({ message: "Error al obtener la lista de calendarios.", details: error.message }, { status: 500 });
+   }
 }

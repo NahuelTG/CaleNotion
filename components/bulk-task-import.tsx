@@ -17,364 +17,370 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
-import type { Task } from "./task-manager";
+import { Task } from "./task-manager"; // Importar el tipo Task
+import { useToast } from "@/hooks/use-toast"; // Ajusta ruta si es necesario
+
+interface GoogleApiCalendar {
+   id: string;
+   summary: string;
+   backgroundColor: string;
+   primary: boolean;
+}
 
 interface BulkTaskImportProps {
-   onImportTasks: (tasks: Omit<Task, "id" | "synced">[]) => void;
+   onProcessAndSyncTasks: (tasksToSync: Task[]) => Promise<{ successCount: number; errorCount: number; results: any[] }>;
+   isAuthenticated: boolean;
    defaultBreakTime: number;
    onUpdateDefaultBreakTime: (minutes: number) => void;
 }
 
-// Tipo para representar un calendario de Google
-interface GoogleCalendar {
-   id: string;
-   name: string;
-   color?: string;
-}
-
-// Tipo para representar una tarea parseada del texto
-interface ParsedTask {
-   title: string;
+interface ParsedInternalTask {
+   /* ... tu tipo ... */ title: string;
    duration: number;
-   breakAfter: number;
-   calendarId: string;
 }
 
-// Definición de calendarios disponibles (en una implementación real, esto vendría de la API)
-const availableCalendars: GoogleCalendar[] = [
-   { id: "primary", name: "Calendario principal", color: "#4285F4" },
-   { id: "work", name: "Trabajo", color: "#0F9D58" },
-   { id: "personal", name: "Personal", color: "#F4B400" },
-   { id: "family", name: "Familia", color: "#DB4437" },
-];
-
-export function BulkTaskImport({ onImportTasks, defaultBreakTime, onUpdateDefaultBreakTime }: BulkTaskImportProps) {
+export function BulkTaskImport({
+   onProcessAndSyncTasks,
+   isAuthenticated,
+   defaultBreakTime,
+   onUpdateDefaultBreakTime,
+}: BulkTaskImportProps) {
    const [taskText, setTaskText] = useState("");
    const [date, setDate] = useState<Date | undefined>(new Date());
    const [startTime, setStartTime] = useState("09:00");
-   const [breakTime, setBreakTime] = useState(defaultBreakTime);
-   const [selectedCalendarId, setSelectedCalendarId] = useState<string>("primary");
-   const [parsedTasks, setParsedTasks] = useState<ParsedTask[]>([]);
+   // `configurableTasks` será Omit<Task, "id" | "synced" | "googleEventId" | "date" | "startTime">
+   // Para que luego se les añada la fecha y hora de inicio calculada
+   const [configurableTasks, setConfigurableTasks] = useState<Omit<Task, "id" | "synced" | "googleEventId" | "date" | "startTime">[]>([]);
+   const [globalBreakTime, setGlobalBreakTime] = useState(defaultBreakTime);
+   const [globalCalendarId, setGlobalCalendarId] = useState<string>("primary");
+   const [userCalendars, setUserCalendars] = useState<GoogleApiCalendar[]>([]);
+   const [isLoadingCalendars, setIsLoadingCalendars] = useState(false);
    const [step, setStep] = useState<"input" | "configure">("input");
+   const [isProcessing, setIsProcessing] = useState(false);
+   const { toast } = useToast();
 
-   // Cargar el calendario predeterminado
    useEffect(() => {
-      const savedCalendarId = localStorage.getItem("selectedCalendarId");
-      if (savedCalendarId) {
-         setSelectedCalendarId(savedCalendarId);
-      }
-   }, []);
+      setGlobalBreakTime(defaultBreakTime);
+   }, [defaultBreakTime]);
 
-   // Expresión regular simplificada para extraer solo título y duración
-   const parseTaskText = (text: string) => {
-      const taskRegex = /- \[ \]\s+(.+?)\s+\[(\d+)\s*(hora|horas|min|minutos|h|m)\]/g;
-      const tasks: ParsedTask[] = [];
+   // Cargar calendarios
+   useEffect(() => {
+      const fetchCalendars = async () => {
+         if (isAuthenticated) {
+            setIsLoadingCalendars(true);
+            try {
+               const response = await fetch("/api/google-calendar/list-calendars");
+               const data = await response.json();
+               if (!response.ok) {
+                  throw new Error(data.message || "Error al cargar calendarios");
+               }
+               setUserCalendars(data.calendars || []);
+               const primaryCal = data.calendars?.find((c: GoogleApiCalendar) => c.primary) || data.calendars?.[0];
+               if (primaryCal) {
+                  setGlobalCalendarId(primaryCal.id);
+               }
+            } catch (error: any) {
+               toast({ title: "Error Calendarios", description: error.message, variant: "destructive" });
+               setUserCalendars([{ id: "primary", summary: "Principal (Error)", backgroundColor: "#ccc", primary: true }]);
+            } finally {
+               setIsLoadingCalendars(false);
+            }
+         } else {
+            setUserCalendars([{ id: "primary", summary: "Principal (Offline)", backgroundColor: "#ccc", primary: true }]);
+         }
+      };
+      fetchCalendars();
+   }, [isAuthenticated, toast]);
+
+   // Tu lógica de `parseTaskText` y `handleTextChange`...
+   const parseTaskText = (text: string): ParsedInternalTask[] => {
+      const taskRegex = /- \[ \]\s+(.+?)\s+\[(\d+)\s*(hora|horas|min|minutos|h|m)\]/gi;
+      const tasks: ParsedInternalTask[] = [];
       let match;
-
       while ((match = taskRegex.exec(text)) !== null) {
          const title = match[1].trim();
          const durationValue = Number.parseInt(match[2]);
          const durationUnit = match[3].toLowerCase();
-
-         // Convertir duración a minutos
          let durationInMinutes = durationValue;
-         if (durationUnit === "hora" || durationUnit === "horas" || durationUnit === "h") {
+         if (["hora", "horas", "h"].includes(durationUnit)) {
             durationInMinutes = durationValue * 60;
          }
-
-         tasks.push({
-            title,
-            duration: durationInMinutes,
-            breakAfter: breakTime, // Usar el tiempo de descanso predeterminado
-            calendarId: selectedCalendarId, // Usar el calendario predeterminado
-         });
+         tasks.push({ title, duration: durationInMinutes });
       }
-
       return tasks;
    };
-
    const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      const text = e.target.value;
-      setTaskText(text);
+      setTaskText(e.target.value);
    };
 
-   const handleParseText = () => {
-      const tasks = parseTaskText(taskText);
-      setParsedTasks(tasks);
-      if (tasks.length > 0) {
-         setStep("configure");
+   const handleParseAndGoToConfigure = () => {
+      setIsProcessing(true);
+      const parsed = parseTaskText(taskText);
+      if (parsed.length === 0) {
+         toast({ title: "Sin tareas", description: "No se encontraron tareas válidas." });
+         setIsProcessing(false);
+         return;
       }
+      // Pre-configurar con valores globales
+      setConfigurableTasks(
+         parsed.map((pTask) => ({
+            title: pTask.title,
+            duration: pTask.duration,
+            breakAfter: globalBreakTime,
+            calendarId: globalCalendarId,
+            description: "", // Por defecto
+         }))
+      );
+      setStep("configure");
+      setIsProcessing(false);
    };
 
-   const handleImport = () => {
-      if (!date || parsedTasks.length === 0) return;
+   const handleFinalImportAndSync = async () => {
+      if (!date || configurableTasks.length === 0 || !isAuthenticated) {
+         toast({ title: "Acción Requerida", description: "Asegúrate de tener fecha, tareas y estar autenticado.", variant: "destructive" });
+         return;
+      }
+      setIsProcessing(true);
 
       const formattedDate = format(date, "yyyy-MM-dd");
       let currentStartTime = startTime;
+      const tasksForSync: Task[] = [];
 
-      const importedTasks: Omit<Task, "id" | "synced">[] = [];
-
-      parsedTasks.forEach((task) => {
-         importedTasks.push({
-            title: task.title,
-            description: "",
-            duration: task.duration,
-            breakAfter: task.breakAfter,
+      configurableTasks.forEach((confTask, index) => {
+         tasksForSync.push({
+            ...confTask,
+            id: `bulk-${Date.now()}-${index}`, // ID local temporal
             date: formattedDate,
             startTime: currentStartTime,
-            calendarId: task.calendarId,
+            synced: false, // Se actualizará por la función de sync
          });
-
-         // Calcular la hora de inicio de la siguiente tarea
-         const [hours, minutes] = currentStartTime.split(":").map(Number);
-         const totalMinutes = hours * 60 + minutes + task.duration + task.breakAfter;
-         const nextHours = Math.floor(totalMinutes / 60);
-         const nextMinutes = totalMinutes % 60;
-
-         currentStartTime = `${nextHours.toString().padStart(2, "0")}:${nextMinutes.toString().padStart(2, "0")}`;
+         // Calcular siguiente hora de inicio
+         const [h, m] = currentStartTime.split(":").map(Number);
+         const totalMins = h * 60 + m + confTask.duration + confTask.breakAfter;
+         currentStartTime = `${String(Math.floor(totalMins / 60) % 24).padStart(2, "0")}:${String(totalMins % 60).padStart(2, "0")}`;
       });
 
-      onImportTasks(importedTasks);
+      const result = await onProcessAndSyncTasks(tasksForSync);
 
-      // Limpiar el formulario y volver al paso inicial
-      setTaskText("");
-      setParsedTasks([]);
-      setStep("input");
+      if (result.successCount > 0) {
+         // Limpiar y volver al inicio
+         setTaskText("");
+         setConfigurableTasks([]);
+         setStep("input");
+      }
+      // Los toasts ya se manejan en `onProcessAndSyncTasks` o `TaskManager`
+      setIsProcessing(false);
    };
 
-   const updateTaskBreakTime = (index: number, newBreakTime: number) => {
-      const updatedTasks = [...parsedTasks];
-      updatedTasks[index].breakAfter = newBreakTime;
-      setParsedTasks(updatedTasks);
+   // Tus funciones `updateTaskBreakTime`, `updateTaskCalendar`, `applyBreakTimeToAll`, `applyCalendarToAll`
+   // ahora operarán sobre `configurableTasks` y `setConfigurableTasks`.
+   // Por ejemplo:
+   const updateConfigurableTaskBreakTime = (index: number, newBreakTime: number) => {
+      const updated = [...configurableTasks];
+      updated[index].breakAfter = newBreakTime;
+      setConfigurableTasks(updated);
+   };
+   const updateConfigurableTaskCalendar = (index: number, calendarId: string) => {
+      const updated = [...configurableTasks];
+      updated[index].calendarId = calendarId;
+      setConfigurableTasks(updated);
+   };
+   const updateConfigurableTaskDescription = (index: number, description: string) => {
+      const updated = [...configurableTasks];
+      updated[index].description = description;
+      setConfigurableTasks(updated);
    };
 
-   const updateTaskCalendar = (index: number, calendarId: string) => {
-      const updatedTasks = [...parsedTasks];
-      updatedTasks[index].calendarId = calendarId;
-      setParsedTasks(updatedTasks);
+   const applyGlobalBreakTimeToAll = (time: number) => {
+      setConfigurableTasks((prev) => prev.map((task) => ({ ...task, breakAfter: time })));
+      setGlobalBreakTime(time);
+      onUpdateDefaultBreakTime(time);
+   };
+   const applyGlobalCalendarToAll = (calendarId: string) => {
+      setConfigurableTasks((prev) => prev.map((task) => ({ ...task, calendarId })));
+      setGlobalCalendarId(calendarId);
+      localStorage.setItem("selectedCalendarId", calendarId); // O un nombre específico para bulk
    };
 
-   const applyBreakTimeToAll = (time: number) => {
-      const updatedTasks = parsedTasks.map((task) => ({
-         ...task,
-         breakAfter: time,
-      }));
-      setParsedTasks(updatedTasks);
-      setBreakTime(time);
-   };
+   // UI (adaptar para usar `configurableTasks` y `userCalendars` en los Select)
+   // Ejemplo para el Select de calendario global:
+   /*
+  <Select value={globalCalendarId} onValueChange={setGlobalCalendarId} disabled={isLoadingCalendars}>
+    <SelectTrigger>
+      <SelectValue placeholder={isLoadingCalendars ? "Cargando..." : "Calendario Global"} />
+    </SelectTrigger>
+    <SelectContent>
+      {userCalendars.map((cal) => (
+        <SelectItem key={cal.id} value={cal.id}>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: cal.backgroundColor }} />
+            {cal.summary} {cal.primary && "(Principal)"}
+          </div>
+        </SelectItem>
+      ))}
+    </SelectContent>
+  </Select>
+  */
+   // Y similar para los Selects individuales.
+   // El botón final llamará a `handleFinalImportAndSync`.
 
-   const applyCalendarToAll = (calendarId: string) => {
-      const updatedTasks = parsedTasks.map((task) => ({
-         ...task,
-         calendarId,
-      }));
-      setParsedTasks(updatedTasks);
-      setSelectedCalendarId(calendarId);
-      localStorage.setItem("selectedCalendarId", calendarId);
-   };
-
-   // Función para obtener el nombre del calendario por su ID
-   const getCalendarName = (id: string) => {
-      const calendar = availableCalendars.find((cal) => cal.id === id);
-      return calendar ? calendar.name : id;
-   };
-
-   // Función para obtener el color del calendario por su ID
-   const getCalendarColor = (id: string) => {
-      const calendar = availableCalendars.find((cal) => cal.id === id);
-      return calendar?.color || "#9AA0A6";
-   };
+   // ... (el resto de tu JSX adaptado)
+   // En la etapa de "configure", mapea sobre `configurableTasks`.
+   // Los Selects de calendario usarán `userCalendars`.
 
    if (step === "input") {
       return (
          <div className="space-y-6">
-            <Alert>
-               <Info className="h-4 w-4" />
-               <AlertTitle>Formato de tareas</AlertTitle>
-               <AlertDescription>
-                  <p>Pega tus tareas en el siguiente formato:</p>
-                  <pre className="mt-2 p-2 bg-gray-100 rounded text-sm">
-                     {`- [ ] Ver de ir al dentista [1 hora]
-- [ ] Avanzar de LeerElCielo [1 hora]
-- [ ] Postear el baile que dará mi tropa [30 min]
-- [ ] Hacer aplicación para pendientes calendar [2 horas]`}
-                  </pre>
-               </AlertDescription>
-            </Alert>
-
+            <Alert> {/* ... Tu Alert ... */} </Alert>
             <div className="space-y-2">
                <Label htmlFor="taskText">Pega tus tareas aquí</Label>
-               <Textarea
-                  id="taskText"
-                  placeholder="Pega tus tareas en el formato indicado arriba"
-                  value={taskText}
-                  onChange={handleTextChange}
-                  rows={8}
-                  className="font-mono"
-               />
+               <Textarea id="taskText" value={taskText} onChange={handleTextChange} rows={8} className="font-mono" />
             </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-               <div className="space-y-2">
-                  <Label htmlFor="date">Fecha de inicio</Label>
-                  <Popover>
-                     <PopoverTrigger asChild>
-                        <Button
-                           variant="outline"
-                           className={cn("w-full justify-start text-left font-normal", !date && "text-muted-foreground")}
-                        >
-                           <CalendarIcon className="mr-2 h-4 w-4" />
-                           {date ? format(date, "PPP", { locale: es }) : "Seleccionar fecha"}
-                        </Button>
-                     </PopoverTrigger>
-                     <PopoverContent className="w-auto p-0">
-                        <Calendar mode="single" selected={date} onSelect={setDate} initialFocus locale={es} />
-                     </PopoverContent>
-                  </Popover>
-               </div>
-
-               <div className="space-y-2">
-                  <Label htmlFor="startTime">Hora de inicio</Label>
-                  <div className="flex items-center">
-                     <Clock className="mr-2 h-4 w-4 text-muted-foreground" />
-                     <Input id="startTime" type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} required />
-                  </div>
-               </div>
-            </div>
-
-            <Button onClick={handleParseText} className="w-full" disabled={!taskText.trim()}>
-               Continuar <ArrowRight className="ml-2 h-4 w-4" />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4"> {/* ... Tus Inputs de fecha y hora ... */} </div>
+            <Button onClick={handleParseAndGoToConfigure} className="w-full" disabled={!taskText.trim() || isProcessing}>
+               {isProcessing ? "Procesando..." : "Continuar"} <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
          </div>
       );
    }
 
+   // STEP "CONFIGURE"
    return (
       <div className="space-y-6">
          <div className="flex justify-between items-center">
-            <h3 className="text-lg font-medium">Configurar {parsedTasks.length} tareas</h3>
-            <Button variant="outline" size="sm" onClick={() => setStep("input")}>
-               Volver a editar texto
+            <h3 className="text-lg font-medium">Configurar {configurableTasks.length} tareas</h3>
+            <Button variant="outline" size="sm" onClick={() => setStep("input")} disabled={isProcessing}>
+               Volver
             </Button>
          </div>
 
-         <div className="space-y-4 border rounded-md p-4 bg-gray-50">
-            <h4 className="font-medium">Configuración global</h4>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-               <div className="space-y-2">
-                  <Label>Tiempo de descanso para todas las tareas</Label>
-                  <div className="flex items-center gap-4">
-                     <div className="flex-1">
-                        <Slider value={[breakTime]} min={0} max={60} step={5} onValueChange={(value: number[]) => setBreakTime(value[0])} />
-                     </div>
-                     <div className="w-16 flex items-center gap-1">
+         <Card className="bg-gray-50 dark:bg-gray-800">
+            {" "}
+            {/* Configuración Global */}
+            <CardContent className="p-4 space-y-4">
+               <h4 className="font-medium">Configuración global</h4>
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                     {" "}
+                     {/* Global Break Time */}
+                     <Label>Tiempo de descanso para todas</Label>
+                     <div className="flex items-center gap-2 mt-1">
+                        <Slider
+                           value={[globalBreakTime]}
+                           min={0}
+                           max={60}
+                           step={5}
+                           onValueChange={(v) => setGlobalBreakTime(v[0])}
+                           className="flex-1"
+                        />
                         <Input
                            type="number"
-                           min={0}
-                           value={breakTime}
-                           onChange={(e) => setBreakTime(Number.parseInt(e.target.value))}
-                           className="w-12"
+                           value={globalBreakTime}
+                           onChange={(e) => setGlobalBreakTime(parseInt(e.target.value))}
+                           className="w-16 text-center"
                         />
-                        <span className="text-sm text-muted-foreground">min</span>
+                        <span className="text-sm">min</span>
+                        <Button variant="outline" size="sm" onClick={() => applyGlobalBreakTimeToAll(globalBreakTime)}>
+                           Aplicar
+                        </Button>
                      </div>
-                     <Button variant="outline" size="sm" onClick={() => applyBreakTimeToAll(breakTime)}>
-                        Aplicar a todas
-                     </Button>
+                  </div>
+                  <div>
+                     {" "}
+                     {/* Global Calendar */}
+                     <Label>Calendario para todas</Label>
+                     <div className="flex items-center gap-2 mt-1">
+                        <Select value={globalCalendarId} onValueChange={setGlobalCalendarId} disabled={isLoadingCalendars}>
+                           <SelectTrigger className="flex-1">
+                              <SelectValue placeholder={isLoadingCalendars ? "Cargando..." : "Selecciona"} />
+                           </SelectTrigger>
+                           <SelectContent>
+                              {userCalendars.map((cal) => (
+                                 <SelectItem key={cal.id} value={cal.id}>
+                                    <div className="flex items-center gap-2">
+                                       <div className="w-3 h-3 rounded-full" style={{ backgroundColor: cal.backgroundColor }} />
+                                       {cal.summary} {cal.primary && "(Principal)"}
+                                    </div>
+                                 </SelectItem>
+                              ))}
+                           </SelectContent>
+                        </Select>
+                        <Button variant="outline" size="sm" onClick={() => applyGlobalCalendarToAll(globalCalendarId)}>
+                           Aplicar
+                        </Button>
+                     </div>
                   </div>
                </div>
-
-               <div className="space-y-2">
-                  <Label>Calendario para todas las tareas</Label>
-                  <div className="flex gap-2">
-                     <Select value={selectedCalendarId} onValueChange={setSelectedCalendarId}>
-                        <SelectTrigger>
-                           <SelectValue placeholder="Selecciona un calendario" />
-                        </SelectTrigger>
-                        <SelectContent>
-                           {availableCalendars.map((calendar) => (
-                              <SelectItem key={calendar.id} value={calendar.id}>
-                                 <div className="flex items-center gap-2">
-                                    {calendar.color && <div className="w-3 h-3 rounded-full" style={{ backgroundColor: calendar.color }} />}
-                                    {calendar.name}
-                                 </div>
-                              </SelectItem>
-                           ))}
-                        </SelectContent>
-                     </Select>
-                     <Button variant="outline" onClick={() => applyCalendarToAll(selectedCalendarId)}>
-                        Aplicar a todas
-                     </Button>
-                  </div>
-               </div>
-            </div>
-         </div>
+            </CardContent>
+         </Card>
 
          <div className="space-y-4">
+            {" "}
+            {/* Tareas Individuales */}
             <h4 className="font-medium">Tareas detectadas</h4>
-            {parsedTasks.map((task, index) => (
+            {configurableTasks.map((task, index) => (
                <Card key={index}>
-                  <CardContent className="p-4">
-                     <div className="space-y-4">
-                        <div className="flex justify-between items-center">
-                           <h5 className="font-medium">{task.title}</h5>
-                           <span className="text-sm text-muted-foreground">{task.duration} minutos</span>
+                  <CardContent className="p-4 space-y-3">
+                     <div className="flex justify-between items-center">
+                        <h5 className="font-medium">{task.title}</h5>
+                        <span className="text-sm text-muted-foreground">{task.duration} minutos</span>
+                     </div>
+                     <div className="space-y-1">
+                        <Label htmlFor={`desc-${index}`}>Descripción (opcional)</Label>
+                        <Textarea
+                           id={`desc-${index}`}
+                           value={task.description}
+                           onChange={(e) => updateConfigurableTaskDescription(index, e.target.value)}
+                           rows={2}
+                           placeholder="Añade detalles..."
+                        />
+                     </div>
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                           {" "}
+                           {/* Individual Break Time */}
+                           <Label>Descanso después</Label>
+                           <div className="flex items-center gap-2 mt-1">
+                              <Slider
+                                 value={[task.breakAfter]}
+                                 min={0}
+                                 max={60}
+                                 step={5}
+                                 onValueChange={(v) => updateConfigurableTaskBreakTime(index, v[0])}
+                                 className="flex-1"
+                              />
+                              <Input
+                                 type="number"
+                                 value={task.breakAfter}
+                                 onChange={(e) => updateConfigurableTaskBreakTime(index, parseInt(e.target.value))}
+                                 className="w-16 text-center"
+                              />
+                              <span className="text-sm">min</span>
+                           </div>
                         </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                           <div className="space-y-2">
-                              <Label>Tiempo de descanso después</Label>
-                              <div className="flex items-center gap-2">
-                                 <div className="flex-1">
-                                    <Slider
-                                       value={[task.breakAfter]}
-                                       min={0}
-                                       max={60}
-                                       step={5}
-                                       onValueChange={(value: number[]) => updateTaskBreakTime(index, value[0])}
-                                    />
-                                 </div>
-                                 <div className="w-16 flex items-center gap-1">
-                                    <Input
-                                       type="number"
-                                       min={0}
-                                       value={task.breakAfter}
-                                       onChange={(e) => updateTaskBreakTime(index, Number.parseInt(e.target.value))}
-                                       className="w-12"
-                                    />
-                                    <span className="text-sm text-muted-foreground">min</span>
-                                 </div>
-                              </div>
-                           </div>
-
-                           <div className="space-y-2">
-                              <Label>Calendario</Label>
-                              <Select value={task.calendarId} onValueChange={(value: string) => updateTaskCalendar(index, value)}>
-                                 <SelectTrigger>
-                                    <SelectValue>
+                        <div>
+                           {" "}
+                           {/* Individual Calendar */}
+                           <Label>Calendario</Label>
+                           <Select
+                              value={task.calendarId}
+                              onValueChange={(value) => updateConfigurableTaskCalendar(index, value)}
+                              disabled={isLoadingCalendars}
+                           >
+                              <SelectTrigger className="mt-1">
+                                 <SelectValue placeholder={isLoadingCalendars ? "Cargando..." : "Selecciona"} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                 {userCalendars.map((cal) => (
+                                    <SelectItem key={cal.id} value={cal.id}>
                                        <div className="flex items-center gap-2">
-                                          <div
-                                             className="w-3 h-3 rounded-full"
-                                             style={{ backgroundColor: getCalendarColor(task.calendarId) }}
-                                          />
-                                          {getCalendarName(task.calendarId)}
+                                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: cal.backgroundColor }} />
+                                          {cal.summary} {cal.primary && "(Principal)"}
                                        </div>
-                                    </SelectValue>
-                                 </SelectTrigger>
-                                 <SelectContent>
-                                    {availableCalendars.map((calendar) => (
-                                       <SelectItem key={calendar.id} value={calendar.id}>
-                                          <div className="flex items-center gap-2">
-                                             {calendar.color && (
-                                                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: calendar.color }} />
-                                             )}
-                                             {calendar.name}
-                                          </div>
-                                       </SelectItem>
-                                    ))}
-                                 </SelectContent>
-                              </Select>
-                           </div>
+                                    </SelectItem>
+                                 ))}
+                              </SelectContent>
+                           </Select>
                         </div>
                      </div>
                   </CardContent>
@@ -382,9 +388,15 @@ export function BulkTaskImport({ onImportTasks, defaultBreakTime, onUpdateDefaul
             ))}
          </div>
 
-         <Button onClick={handleImport} className="w-full" disabled={parsedTasks.length === 0 || !date}>
-            <Check className="mr-2 h-4 w-4" /> Importar {parsedTasks.length} tareas
+         <Button
+            onClick={handleFinalImportAndSync}
+            className="w-full"
+            disabled={isProcessing || configurableTasks.length === 0 || !isAuthenticated}
+         >
+            {isProcessing ? "Importando y Sincronizando..." : `Importar y Sincronizar ${configurableTasks.length} Tareas`}
+            <Check className="mr-2 h-4 w-4" />
          </Button>
+         {!isAuthenticated && <p className="text-sm text-center text-red-500">Debes iniciar sesión con Google para sincronizar.</p>}
       </div>
    );
 }
