@@ -11,19 +11,7 @@ import { TaskList } from "@/components/task-list"; // Asumimos que TaskList tamb
 import { GoogleAuthButton } from "@/components/google-auth-button";
 import { BulkTaskImport } from "@/components/bulk-task-import";
 import { useToast } from "@/hooks/use-toast"; // Ajusta la ruta si es necesario
-
-export interface Task {
-   id: string; // ID local único
-   title: string;
-   description?: string;
-   duration: number; // en minutos
-   breakAfter: number; // en minutos
-   date: string; // YYYY-MM-DD
-   startTime: string; // HH:mm
-   synced?: boolean;
-   calendarId?: string; // ID del calendario de Google
-   googleEventId?: string; // ID del evento en Google Calendar una vez sincronizado
-}
+import type { Task } from "../interfaces/tasks.interface";
 
 export function TaskManager() {
    const { data: session, status } = useSession();

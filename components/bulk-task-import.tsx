@@ -1,42 +1,25 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { Calendar as CalendarUICalendar } from "@/components/ui/calendar"; // Renombrado para evitar conflicto
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CalendarIcon, Clock, Info, Check, ArrowRight } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent } from "@/components/ui/card";
-import { Slider } from "@/components/ui/slider";
-import type { Task } from "./task-manager"; // Viene de TaskManager
 import { useToast } from "@/hooks/use-toast";
 
-interface GoogleApiCalendar {
-   id: string;
-   summary: string;
-   backgroundColor: string;
-   primary: boolean;
-}
-
-interface BulkTaskImportProps {
-   onProcessAndSyncTasks: (tasksToSync: Omit<Task, "id" | "synced" | "googleEventId">[]) => Promise<{ successCount: number }>; // Devuelve el número de éxitos
-   isAuthenticated: boolean;
-   defaultBreakTime: number;
-   onUpdateDefaultBreakTime: (minutes: number) => void;
-}
-
-// Tarea parseada internamente antes de añadir detalles de fecha/hora
-interface ParsedInternalTask {
-   title: string;
-   duration: number; // en minutos
-}
+//UI
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Calendar as CalendarUICalendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Card, CardContent } from "@/components/ui/card";
+import { Slider } from "@/components/ui/slider";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import type { Task, BulkTaskImportProps, ParsedInternalTask } from "../interfaces/tasks.interface";
+import type { GoogleApiCalendar } from "../interfaces/google.api.interface";
 
 // Tarea lista para configurar (antes de añadir fecha/hora globales)
 type ConfigurableTask = Omit<Task, "id" | "synced" | "googleEventId" | "date" | "startTime">;
