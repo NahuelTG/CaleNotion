@@ -1,70 +1,69 @@
-"use client"
+// components/google-auth-button.tsx
+"use client";
 
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { LogIn, LogOut } from "lucide-react"
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { LogIn, LogOut } from "lucide-react";
+import { signIn, signOut, useSession } from "next-auth/react";
+import { useToast } from "@/hooks/use-toast"; // Ajusta la ruta si es necesario
 
-interface GoogleAuthButtonProps {
-  onAuthSuccess: () => void
-  isAuthenticated: boolean
-}
+export function GoogleAuthButton() {
+   const { data: session, status } = useSession();
+   const [isProcessing, setIsProcessing] = useState(false);
+   const { toast } = useToast();
 
-export function GoogleAuthButton({ onAuthSuccess, isAuthenticated }: GoogleAuthButtonProps) {
-  const [isLoading, setIsLoading] = useState(false)
+   const handleAuth = async () => {
+      setIsProcessing(true);
+      try {
+         if (session) {
+            await signOut({ redirect: false }); // redirect: false para manejar UI sin recarga completa
+            toast({ title: "Sesión Cerrada", description: "Has cerrado sesión." });
+         } else {
+            await signIn("google"); // Esto redirigirá a la página de inicio de sesión de Google
+         }
+      } catch (error) {
+         console.error("Error de autenticación:", error);
+         toast({ title: "Error", description: "Ocurrió un problema durante la autenticación.", variant: "destructive" });
+      } finally {
+         setIsProcessing(false);
+      }
+   };
 
-  const handleAuth = async () => {
-    if (isAuthenticated) {
-      // Lógica para cerrar sesión
-      // En una implementación real, esto llamaría a una API para revocar el token
-      window.location.reload()
-      return
-    }
+   // El estado de isAuthenticated se deriva directamente de 'status'
+   const isAuthenticated = status === "authenticated";
 
-    setIsLoading(true)
+   if (status === "loading" && !isProcessing) {
+      // Evita 'Cargando sesión...' si ya está 'Procesando...'
+      return (
+         <Button variant="outline" size="sm" disabled>
+            Cargando sesión...
+         </Button>
+      );
+   }
 
-    try {
-      // Simulación de autenticación con Google
-      // En una implementación real, esto usaría la API de Google OAuth
-      setTimeout(() => {
-        onAuthSuccess()
-        setIsLoading(false)
-      }, 1500)
-    } catch (error) {
-      console.error("Error de autenticación:", error)
-      setIsLoading(false)
-    }
-  }
-
-  return (
-    <Button variant={isAuthenticated ? "outline" : "default"} size="sm" onClick={handleAuth} disabled={isLoading}>
-      {isLoading ? (
-        <span className="flex items-center">
-          <svg
-            className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-          >
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-            <path
-              className="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-            ></path>
-          </svg>
-          Cargando...
-        </span>
-      ) : isAuthenticated ? (
-        <>
-          <LogOut className="h-4 w-4 mr-2" />
-          Cerrar sesión
-        </>
-      ) : (
-        <>
-          <LogIn className="h-4 w-4 mr-2" />
-          Iniciar con Google
-        </>
-      )}
-    </Button>
-  )
+   return (
+      <Button
+         variant={isAuthenticated ? "outline" : "default"}
+         size="sm"
+         onClick={handleAuth}
+         disabled={isProcessing || status === "loading"}
+      >
+         {isProcessing ? (
+            <span className="flex items-center">
+               <svg /* tu SVG de carga */ className="animate-spin -ml-1 mr-2 h-4 w-4" /* ... */></svg>
+               Procesando...
+            </span>
+         ) : isAuthenticated ? (
+            <>
+               <LogOut className="h-4 w-4 mr-2" />
+               Cerrar sesión
+            </>
+         ) : (
+            <>
+               <LogIn className="h-4 w-4 mr-2" />
+               Iniciar con Google
+            </>
+         )}
+      </Button>
+   );
 }
