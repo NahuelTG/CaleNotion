@@ -58,26 +58,47 @@ export function TaskManager() {
          if (isAuthenticated) {
             setIsLoadingCalendars(true);
             try {
-               const response = await fetch("/api/google-calendar/calendars");
+               const response = await fetch("/api/calendar"); // Asumiendo que esta URL es correcta y no da 404
                if (!response.ok) {
-                  const errorResult = await response.json();
-                  throw new Error(errorResult.error || `Error ${response.status} fetching calendars`);
+                  // ... tu manejo de error ...
+                  let errorBodyText = await response.text();
+                  try {
+                     const errorResult = JSON.parse(errorBodyText);
+                     throw new Error(errorResult.error || errorResult.message || `Error ${response.status} fetching calendars`);
+                  } catch (e) {
+                     throw new Error(`Error ${response.status} fetching calendars: ${errorBodyText.substring(0, 100)}`);
+                  }
                }
-               const calendarsData: CalendarItem[] = await response.json();
-               setAvailableCalendars(calendarsData);
-               // Opcional: seleccionar uno por defecto si es necesario
-               // if (calendarsData.length > 0) {
-               //   const primary = calendarsData.find(c => c.primary) || calendarsData[0];
-               //   setSelectedCalendarId(primary.id);
-               // }
+
+               const responseObject = await response.json(); // Esto es { calendars: Array(...) }
+               console.log("TaskManager: Response object from API:", responseObject);
+
+               // VERIFICA ESTA LÓGICA DETENIDAMENTE
+               if (
+                  responseObject &&
+                  typeof responseObject === "object" &&
+                  responseObject.calendars &&
+                  Array.isArray(responseObject.calendars)
+               ) {
+                  // SI responseObject es { calendars: [...] }, entonces usa responseObject.calendars
+                  setAvailableCalendars(responseObject.calendars as CalendarItem[]);
+                  console.log("TaskManager: setAvailableCalendars con responseObject.calendars");
+               } else if (Array.isArray(responseObject)) {
+                  // SI responseObject es directamente el array [...] (poco probable según tu log)
+                  setAvailableCalendars(responseObject as CalendarItem[]);
+                  console.log("TaskManager: setAvailableCalendars con responseObject (array directo)");
+               } else {
+                  console.warn("TaskManager: Formato de datos de calendarios inesperado o nulo:", responseObject);
+                  setAvailableCalendars([]); // Asegura que sea un array vacío en caso de error/formato incorrecto
+               }
             } catch (error: any) {
-               console.error("Error fetching user calendars:", error);
+               console.error("TaskManager: Error fetching user calendars:", error);
                toast({
                   title: "Error al cargar calendarios",
                   description: error.message,
                   variant: "destructive",
                });
-               setAvailableCalendars([]); // Resetea o maneja el error como prefieras
+               setAvailableCalendars([]); // Fallback a array vacío
             } finally {
                setIsLoadingCalendars(false);
             }

@@ -5,8 +5,13 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { google } from "googleapis";
 
 export async function GET() {
+   console.log("API Route /api/calendar HIT!"); // <-- Añade este log
+
    const session = await getServerSession(authOptions);
    const accessToken = session?.accessToken || (session as any)?.token?.accessToken;
+
+   console.log("Session in /api/calendar:", JSON.stringify(session, null, 2));
+   console.log("Access Token in /api/calendar:", accessToken);
 
    if (!session || !session.accessToken) {
       return NextResponse.json({ message: "No autorizado." }, { status: 401 });
@@ -22,12 +27,12 @@ export async function GET() {
       const calendars =
          response.data.items?.map((cal) => ({
             id: cal.id!,
-            name: cal.summary, // Nombre del calendario
-            summary: cal.summaryOverride || cal.summary!, // summaryOverride si existe, sino summary
-            backgroundColor: cal.backgroundColor!,
+            name: cal.summary!,
+            color: cal.backgroundColor, // Google API lo llama backgroundColor
             primary: cal.primary || false,
+            accessRole: cal.accessRole,
          })) || [];
-
+      console.log("Calendars fetched for /api/calendar:", calendars.length);
       return NextResponse.json({ calendars }, { status: 200 });
    } catch (error: any) {
       console.error("Error fetching calendar list:", error.response?.data || error.message);
