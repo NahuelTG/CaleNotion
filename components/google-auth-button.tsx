@@ -20,8 +20,6 @@ export function GoogleAuthButton() {
             toast({ title: "Sesión Cerrada", description: "Has cerrado sesión." });
          } else {
             await signIn("google"); // Esto redirigirá a la página de inicio de sesión de Google
-            // next-auth gestionará la redirección de vuelta. El toast de bienvenida
-            // podría hacerse en TaskManager o donde se consuma la sesión.
          }
       } catch (error) {
          console.error("Error de autenticación:", error);

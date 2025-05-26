@@ -1,12 +1,14 @@
 "use client";
 
+import { format, addMinutes, parse } from "date-fns";
+import { es } from "date-fns/locale";
+import type { TaskListProps, Task } from "../interfaces/tasks.interface";
+
+//UI
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Clock, CalendarIcon, Trash2, CheckCircle } from "lucide-react";
-import { format, addMinutes, parse } from "date-fns";
-import { es } from "date-fns/locale";
-import type { TaskListProps, Task } from "../interfaces/tasks.interface";
 
 // Definición de calendarios disponibles (en una implementación real, esto vendría de la API)
 const calendars = [

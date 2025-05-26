@@ -1,5 +1,4 @@
 import type React from "react";
-import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
@@ -7,13 +6,6 @@ import { ThemeProvider } from "@/components/theme-provider";
 import Providers from "./providers";
 
 const inter = Inter({ subsets: ["latin"] });
-
-export const metadata: Metadata = {
-   title: "Planificador de Tareas",
-   description: "Organiza tus tareas y sincronízalas con Google Calendar",
-   manifest: "/manifest.json",
-   generator: "v0.dev",
-};
 
 export default function RootLayout({
    children,

@@ -2,16 +2,18 @@
 
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
-import { Calendar as CalendarIconLucide } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { TaskForm } from "@/components/task-form"; // Asumimos que TaskForm también se adaptará para usar calendarios reales
-import { TaskList } from "@/components/task-list"; // Asumimos que TaskList también se adaptará
+import { Calendar } from "lucide-react";
 import { GoogleAuthButton } from "@/components/google-auth-button";
 import { BulkTaskImport } from "@/components/bulk-task-import";
 import { useToast } from "@/hooks/use-toast"; // Ajusta la ruta si es necesario
-import type { Task } from "../interfaces/tasks.interface";
+import type { Task, CalendarItem } from "../interfaces/tasks.interface";
+import { TaskForm } from "@/components/task-form"; // Asumimos que TaskForm también se adaptará para usar calendarios reales
+import { TaskList } from "@/components/task-list"; // Asumimos que TaskList también se adaptará
+
+//UI
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export function TaskManager() {
    const { data: session, status } = useSession();
@@ -19,6 +21,8 @@ export function TaskManager() {
    const [defaultBreakTime, setDefaultBreakTime] = useState(15);
    const [isSyncing, setIsSyncing] = useState(false);
    const { toast } = useToast();
+   const [availableCalendars, setAvailableCalendars] = useState<CalendarItem[]>([]);
+   const [isLoadingCalendars, setIsLoadingCalendars] = useState(false);
 
    const isAuthenticated = status === "authenticated";
 
@@ -40,7 +44,7 @@ export function TaskManager() {
 
    // Efecto para errores de sesión de NextAuth
    useEffect(() => {
-      if (status === "unauthenticated" && session?.error === "RefreshAccessTokenError") {
+      if (status === "unauthenticated") {
          toast({
             title: "Sesión Expirada",
             description: "Por favor, inicia sesión de nuevo para continuar.",
@@ -48,6 +52,42 @@ export function TaskManager() {
          });
       }
    }, [status, session, toast]);
+   // Efecto para cargar calendarios cuando el usuario está autenticado
+   useEffect(() => {
+      const fetchUserCalendars = async () => {
+         if (isAuthenticated) {
+            setIsLoadingCalendars(true);
+            try {
+               const response = await fetch("/api/google-calendar/calendars");
+               if (!response.ok) {
+                  const errorResult = await response.json();
+                  throw new Error(errorResult.error || `Error ${response.status} fetching calendars`);
+               }
+               const calendarsData: CalendarItem[] = await response.json();
+               setAvailableCalendars(calendarsData);
+               // Opcional: seleccionar uno por defecto si es necesario
+               // if (calendarsData.length > 0) {
+               //   const primary = calendarsData.find(c => c.primary) || calendarsData[0];
+               //   setSelectedCalendarId(primary.id);
+               // }
+            } catch (error: any) {
+               console.error("Error fetching user calendars:", error);
+               toast({
+                  title: "Error al cargar calendarios",
+                  description: error.message,
+                  variant: "destructive",
+               });
+               setAvailableCalendars([]); // Resetea o maneja el error como prefieras
+            } finally {
+               setIsLoadingCalendars(false);
+            }
+         } else {
+            setAvailableCalendars([]); // Limpiar calendarios si no está autenticado
+         }
+      };
+
+      fetchUserCalendars();
+   }, [isAuthenticated, toast]);
 
    const addTask = (taskData: Omit<Task, "id" | "synced" | "googleEventId">) => {
       const newTask: Task = {
@@ -185,7 +225,6 @@ export function TaskManager() {
             toast({
                title: "Algunas Sincronizaciones Fallaron",
                description: "Revisa los detalles si la API los provee, o los logs.",
-               variant: "warning",
             });
          }
       }
@@ -241,7 +280,6 @@ export function TaskManager() {
          toast({
             title: "Importación Masiva Parcial",
             description: "Algunas tareas no pudieron ser sincronizadas. Revisa los logs del servidor.",
-            variant: "warning",
          });
       }
 
@@ -261,9 +299,9 @@ export function TaskManager() {
    return (
       <Tabs defaultValue="tasks" className="w-full">
          <TabsList className="grid w-full grid-cols-3 mb-6">
+            <TabsTrigger value="import">Importar Tareas</TabsTrigger>
             <TabsTrigger value="tasks">Mis Tareas</TabsTrigger>
             <TabsTrigger value="add">Agregar Tarea</TabsTrigger>
-            <TabsTrigger value="import">Importar Tareas</TabsTrigger>
          </TabsList>
 
          <TabsContent value="tasks">
@@ -280,7 +318,7 @@ export function TaskManager() {
                               onClick={handleGeneralSync}
                               disabled={isSyncing || tasks.filter((t) => !t.synced && !t.googleEventId).length === 0}
                            >
-                              <CalendarIconLucide className="h-4 w-4 mr-2" />
+                              <Calendar className="h-4 w-4 mr-2" />
                               {isSyncing
                                  ? "Sincronizando..."
                                  : `Sincronizar (${tasks.filter((t) => !t.synced && !t.googleEventId).length})`}
@@ -305,6 +343,8 @@ export function TaskManager() {
                      onAddTask={addTask}
                      defaultBreakTime={defaultBreakTime}
                      isAuthenticated={isAuthenticated} // Pasar para que TaskForm pueda cargar calendarios
+                     availableCalendars={availableCalendars} // <--- NUEVO
+                     isLoadingCalendars={isLoadingCalendars} // <--- NUEVO
                   />
                </CardContent>
             </Card>

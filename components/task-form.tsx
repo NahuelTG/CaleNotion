@@ -14,7 +14,7 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { TaskFormProps } from "../interfaces/tasks.interface";
+import type { CalendarItem, TaskFormPropsFromParent } from "../interfaces/tasks.interface";
 
 // Definición de calendarios disponibles (en una implementación real, esto vendría de la API)
 const calendars = [
@@ -24,7 +24,13 @@ const calendars = [
    { id: "family", name: "Familia", color: "#DB4437" },
 ];
 
-export function TaskForm({ onAddTask, defaultBreakTime }: TaskFormProps) {
+export function TaskForm({
+   onAddTask,
+   defaultBreakTime,
+   isAuthenticated,
+   availableCalendars,
+   isLoadingCalendars,
+}: TaskFormPropsFromParent) {
    const [title, setTitle] = useState("");
    const [description, setDescription] = useState("");
    const [duration, setDuration] = useState(30);

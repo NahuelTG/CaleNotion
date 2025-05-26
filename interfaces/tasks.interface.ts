@@ -12,6 +12,14 @@ export interface Task {
    googleEventId?: string; // ID del evento en Google Calendar una vez sincronizado
 }
 
+export interface CalendarItem {
+   id: string;
+   name: string;
+   color?: string;
+   primary?: boolean;
+   accessRole?: string;
+}
+
 export interface TaskListProps {
    tasks: Task[];
    onRemoveTask: (id: string) => void;
@@ -24,12 +32,15 @@ export interface BulkTaskImportProps {
    onUpdateDefaultBreakTime: (minutes: number) => void;
 }
 
+export interface TaskFormPropsFromParent {
+   onAddTask: (taskData: Omit<Task, "id" | "synced" | "googleEventId">) => void;
+   defaultBreakTime: number;
+   isAuthenticated: boolean; // <--- Aceptar esta prop
+   availableCalendars: CalendarItem[]; // <--- Aceptar esta prop
+   isLoadingCalendars: boolean; // <--- Aceptar esta prop
+}
+
 export interface ParsedInternalTask {
    title: string;
    duration: number; // en minutos
-}
-
-export interface TaskFormProps {
-   onAddTask: (task: Omit<Task, "id" | "synced">) => void;
-   defaultBreakTime: number;
 }

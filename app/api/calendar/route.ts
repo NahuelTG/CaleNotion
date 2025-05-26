@@ -1,11 +1,12 @@
 // app/api/google-calendar/list-calendars/route.ts
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route"; // Ajusta la ruta
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { google } from "googleapis";
 
 export async function GET() {
    const session = await getServerSession(authOptions);
+   const accessToken = session?.accessToken || (session as any)?.token?.accessToken;
 
    if (!session || !session.accessToken) {
       return NextResponse.json({ message: "No autorizado." }, { status: 401 });
@@ -21,6 +22,7 @@ export async function GET() {
       const calendars =
          response.data.items?.map((cal) => ({
             id: cal.id!,
+            name: cal.summary, // Nombre del calendario
             summary: cal.summaryOverride || cal.summary!, // summaryOverride si existe, sino summary
             backgroundColor: cal.backgroundColor!,
             primary: cal.primary || false,
