@@ -154,8 +154,13 @@ export function BulkTaskImport({
                <AlertTitle>Formato de tareas</AlertTitle>
                <AlertDescription>
                   <p>Pega tus tareas en el siguiente formato (una por línea):</p>
-                  <pre className="mt-2 p-2 bg-gray-100 dark:bg-gray-700 rounded text-sm">- [ ] Título de la tarea [Duración en min/h]</pre>
-                  Ej: <pre className="mt-1 p-1 bg-gray-100 dark:bg-gray-700 rounded text-xs">- [ ] Reunión equipo [1h]</pre>
+                  <pre className="mt-2 p-2 bg-gray-100 dark:bg-gray-700 rounded sm:text-sm text-sm whitespace-normal w-full break-words">
+                     - [ ] Título de la tarea [min/h] <br />- [ ] Título de la tarea [min/h] <br />- [ ] Título de la tarea [min/h]
+                  </pre>
+                  Ej:{" "}
+                  <pre className="mt-2 p-2 bg-gray-100 dark:bg-gray-700 rounded sm:text-sm text-xs whitespace-normal w-full break-words">
+                     - [ ] Reunión de trabajo [1 hora] <br />- [ ] Realizar un proyecto [2 horas] <br />- [ ] Recoger un regalo [30 min]
+                  </pre>
                </AlertDescription>
             </Alert>
 
