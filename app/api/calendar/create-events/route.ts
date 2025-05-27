@@ -1,7 +1,7 @@
 // app/api/calendar/create-events/route.ts
 import { NextResponse, NextRequest } from "next/server";
 import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/app/api/auth/options";
 import { google, calendar_v3 } from "googleapis"; // Importa el tipo específico si es necesario
 import { EventToCreate } from "../../../../interfaces/tasks.interface";
 
