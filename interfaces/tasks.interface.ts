@@ -10,6 +10,8 @@ export interface Task {
    synced?: boolean;
    calendarId?: string; // ID del calendario de Google
    googleEventId?: string; // ID del evento en Google Calendar una vez sincronizado
+   calendarName?: string;
+   calendarColor?: string;
 }
 
 export interface CalendarItem {

@@ -111,10 +111,12 @@ export function TaskManager() {
    }, [isAuthenticated, toast]);
 
    const addTask = (taskData: Omit<Task, "id" | "synced" | "googleEventId">) => {
+      // taskData ahora incluye calendarName y calendarColor
       const newTask: Task = {
-         ...taskData,
+         ...taskData, // Esto ya copiará calendarName y calendarColor si vienen de TaskForm
          id: `local-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
          synced: false,
+         // googleEventId se establecerá después de la sincronización
       };
       setTasks((prevTasks) => [...prevTasks, newTask]);
       toast({ title: "Tarea agregada", description: "Recuerda sincronizarla con Google Calendar." });

@@ -31,19 +31,6 @@ export function TaskForm({
    const [startTime, setStartTime] = useState("09:00");
    const [selectedCalendarId, setSelectedCalendarId] = useState<string>("primary");
 
-   console.log(
-      "TaskForm RENDER. isAuthenticated:",
-      isAuthenticated,
-      "isLoadingCalendars:",
-      isLoadingCalendars,
-      "availableCalendars IS ARRAY:",
-      Array.isArray(availableCalendars),
-      "availableCalendars length:",
-      Array.isArray(availableCalendars) ? availableCalendars.length : "N/A",
-      "availableCalendars content:",
-      availableCalendars // Loguea el contenido para inspección
-   );
-
    // Actualizar el tiempo de descanso cuando cambia el valor predeterminado
    useEffect(() => {
       setBreakAfter(defaultBreakTime);
@@ -60,7 +47,13 @@ export function TaskForm({
    const handleSubmit = (e: React.FormEvent) => {
       e.preventDefault();
 
-      if (!title || !date) return;
+      if (!title || !date || !selectedCalendarId) {
+         console.warn("Por favor, completa todos los campos requeridos, incluyendo el calendario.");
+         return;
+      }
+      const selectedCalendar = Array.isArray(availableCalendars)
+         ? availableCalendars.find((cal) => cal.id === selectedCalendarId)
+         : undefined;
 
       onAddTask({
          title,
@@ -70,6 +63,8 @@ export function TaskForm({
          date: format(date, "yyyy-MM-dd"),
          startTime,
          calendarId: selectedCalendarId,
+         calendarName: selectedCalendar?.name,
+         calendarColor: selectedCalendar?.color,
       });
 
       // Resetear el formulario
