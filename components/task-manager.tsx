@@ -338,11 +338,11 @@ export function TaskManager() {
                <CardHeader>
                   <CardTitle className="flex flex-wrap justify-between items-center gap-2">
                      <span>Tareas Programadas</span>
-                     <div className="flex gap-2 items-center">
-                        <GoogleAuthButton />
+                     <div className="flex flex-wrap gap-2 items-center">
                         {isAuthenticated && (
                            <Button
                               variant="outline"
+                              className="sm:text-base text-sm"
                               size="sm"
                               onClick={handleGeneralSync}
                               disabled={isSyncing || tasks.filter((t) => !t.synced && !t.googleEventId).length === 0}
@@ -353,6 +353,7 @@ export function TaskManager() {
                                  : `Sincronizar (${tasks.filter((t) => !t.synced && !t.googleEventId).length})`}
                            </Button>
                         )}
+                        <GoogleAuthButton />
                      </div>
                   </CardTitle>
                </CardHeader>
