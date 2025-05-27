@@ -193,7 +193,7 @@ export function TaskManager() {
       });
 
       try {
-         const response = await fetch("/api/google-calendar/create-events", {
+         const response = await fetch("/api/calendar/create-events", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ events: eventsForAPI }),
@@ -206,7 +206,7 @@ export function TaskManager() {
          }
          return { success: true, ...apiResult };
       } catch (error: any) {
-         console.error("Error llamando a /api/google-calendar/create-events:", error);
+         console.error("Error llamando a /api/calendar/create-events:", error);
          toast({ title: "Error de Sincronización", description: error.message, variant: "destructive" });
          return {
             success: false,
@@ -383,6 +383,8 @@ export function TaskManager() {
                      onProcessAndSyncTasks={handleBulkImportAndSync}
                      isAuthenticated={isAuthenticated}
                      defaultBreakTime={defaultBreakTime}
+                     availableCalendars={availableCalendars} // <--- NUEVO
+                     isLoadingCalendars={isLoadingCalendars} // <--- NUEVO
                      onUpdateDefaultBreakTime={updateDefaultBreakTime}
                   />
                </CardContent>
