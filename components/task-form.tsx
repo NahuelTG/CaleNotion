@@ -161,17 +161,11 @@ export function TaskForm({
                disabled={!isAuthenticated || isLoadingCalendars || availableCalendars.length === 0}
             >
                <SelectTrigger>
-                  <SelectValue
-                     placeholder={
-                        !isAuthenticated
-                           ? "Inicia sesión para ver calendarios"
-                           : isLoadingCalendars
-                           ? "Cargando calendarios..."
-                           : availableCalendars.length === 0
-                           ? "No hay calendarios disponibles"
-                           : "Selecciona un calendario"
-                     }
-                  />
+                  {(!isAuthenticated && "Inicia sesión para ver calendarios") ||
+                     (isLoadingCalendars && "Cargando calendarios...") ||
+                     (availableCalendars.length === 0 && "No hay calendarios disponibles") ||
+                     availableCalendars.find((c) => c.id === selectedCalendarId)?.name ||
+                     "Selecciona un calendario"}
                </SelectTrigger>
                <SelectContent>
                   {isAuthenticated &&
