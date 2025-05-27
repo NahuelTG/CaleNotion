@@ -1,13 +1,13 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { CalendarIcon, Clock, Info, Check, ArrowRight } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 
 //UI
+import { CalendarIcon, Clock, Info, Check, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -28,6 +28,8 @@ export function BulkTaskImport({
    onProcessAndSyncTasks,
    isAuthenticated,
    defaultBreakTime,
+   availableCalendars,
+   isLoadingCalendars,
    onUpdateDefaultBreakTime,
 }: BulkTaskImportProps) {
    const [taskText, setTaskText] = useState("");
@@ -37,7 +39,6 @@ export function BulkTaskImport({
    const [globalBreakTime, setGlobalBreakTime] = useState(defaultBreakTime);
    const [globalCalendarId, setGlobalCalendarId] = useState<string>("primary");
    const [userCalendars, setUserCalendars] = useState<GoogleApiCalendar[]>([]);
-   const [isLoadingCalendars, setIsLoadingCalendars] = useState(false);
    const [step, setStep] = useState<"input" | "configure">("input");
    const [isProcessing, setIsProcessing] = useState(false);
    const { toast } = useToast();
@@ -45,38 +46,6 @@ export function BulkTaskImport({
    useEffect(() => {
       setGlobalBreakTime(defaultBreakTime);
    }, [defaultBreakTime]);
-
-   useEffect(() => {
-      const fetchCalendars = async () => {
-         if (isAuthenticated) {
-            setIsLoadingCalendars(true);
-            try {
-               const response = await fetch("/api/google-calendar/list-calendars");
-               if (!response.ok) {
-                  // Primero verifica si la respuesta es OK
-                  const errorData = await response.json().catch(() => ({ message: "Error al parsear respuesta de error de calendarios." }));
-                  throw new Error(errorData.message || `Error HTTP ${response.status} al cargar calendarios`);
-               }
-               const data = await response.json(); // Ahora sí parsea JSON
-               setUserCalendars(data.calendars || []);
-               const primaryCal = data.calendars?.find((c: GoogleApiCalendar) => c.primary) || data.calendars?.[0];
-               if (primaryCal) setGlobalCalendarId(primaryCal.id);
-               else if (data.calendars?.length > 0) setGlobalCalendarId(data.calendars[0].id);
-               else setGlobalCalendarId("primary"); // Fallback
-            } catch (error: any) {
-               toast({ title: "Error Calendarios", description: error.message, variant: "destructive" });
-               setUserCalendars([{ id: "primary", summary: "Principal (Error al cargar)", backgroundColor: "#ccc", primary: true }]);
-               setGlobalCalendarId("primary");
-            } finally {
-               setIsLoadingCalendars(false);
-            }
-         } else {
-            setUserCalendars([{ id: "primary", summary: "Principal (No autenticado)", backgroundColor: "#718096", primary: true }]);
-            setGlobalCalendarId("primary");
-         }
-      };
-      fetchCalendars();
-   }, [isAuthenticated, toast]);
 
    const parseTaskTextToInternal = (text: string): ParsedInternalTask[] => {
       const taskRegex = /- \[ \]\s+(.+?)\s+\[(\d+)\s*(hora|horas|min|minutos|h|m)\]/gi;
@@ -185,8 +154,13 @@ export function BulkTaskImport({
                <AlertTitle>Formato de tareas</AlertTitle>
                <AlertDescription>
                   <p>Pega tus tareas en el siguiente formato (una por línea):</p>
-                  <pre className="mt-2 p-2 bg-gray-100 dark:bg-gray-700 rounded text-sm">- [ ] Título de la tarea [Duración en min/h]</pre>
-                  Ej: <pre className="mt-1 p-1 bg-gray-100 dark:bg-gray-700 rounded text-xs">- [ ] Reunión equipo [1h]</pre>
+                  <pre className="mt-2 p-2 bg-gray-100 dark:bg-gray-700 rounded sm:text-sm text-sm whitespace-normal w-full break-words">
+                     - [ ] Título de la tarea [min/h] <br />- [ ] Título de la tarea [min/h] <br />- [ ] Título de la tarea [min/h]
+                  </pre>
+                  Ej:{" "}
+                  <pre className="mt-2 p-2 bg-gray-100 dark:bg-gray-700 rounded sm:text-sm text-xs whitespace-normal w-full break-words">
+                     - [ ] Reunión de trabajo [1 hora] <br />- [ ] Realizar un proyecto [2 horas] <br />- [ ] Recoger un regalo [30 min]
+                  </pre>
                </AlertDescription>
             </Alert>
 
@@ -273,20 +247,32 @@ export function BulkTaskImport({
                            onValueChange={setGlobalCalendarId}
                            disabled={isLoadingCalendars || !isAuthenticated}
                         >
-                           <SelectTrigger className="flex-1">
-                              <SelectValue
-                                 placeholder={isLoadingCalendars ? "Cargando..." : isAuthenticated ? "Seleccionar" : "No autenticado"}
-                              />
+                           <SelectTrigger>
+                              {(!isAuthenticated && "Inicia sesión para ver calendarios") ||
+                                 (isLoadingCalendars && "Cargando calendarios...") ||
+                                 (availableCalendars.length === 0 && "No hay calendarios disponibles") ||
+                                 availableCalendars.find((c) => c.id === globalCalendarId)?.name ||
+                                 "Selecciona un calendario"}
                            </SelectTrigger>
                            <SelectContent>
-                              {userCalendars.map((cal) => (
-                                 <SelectItem key={cal.id} value={cal.id}>
-                                    <div className="flex items-center gap-2">
-                                       <div className="w-3 h-3 rounded-full" style={{ backgroundColor: cal.backgroundColor }} />
-                                       {cal.summary} {cal.primary && "(Principal)"}
-                                    </div>
-                                 </SelectItem>
-                              ))}
+                              {isAuthenticated &&
+                                 !isLoadingCalendars &&
+                                 availableCalendars.map((calendar) => (
+                                    <SelectItem key={calendar.id} value={calendar.id}>
+                                       <div className="flex items-center gap-2">
+                                          {calendar.color && (
+                                             <div className="w-3 h-3 rounded-full" style={{ backgroundColor: calendar.color }} />
+                                          )}
+                                          {calendar.name}
+                                       </div>
+                                    </SelectItem>
+                                 ))}
+                              {/* Opcional: mostrar mensaje si no hay calendarios o no está autenticado */}
+                              {isAuthenticated && !isLoadingCalendars && availableCalendars.length === 0 && (
+                                 <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                                    No se encontraron calendarios o no tienes permisos de escritura.
+                                 </div>
+                              )}
                            </SelectContent>
                         </Select>
                         <Button
@@ -350,20 +336,32 @@ export function BulkTaskImport({
                               onValueChange={(value) => updateIndividualTask(index, "calendarId", value)}
                               disabled={isLoadingCalendars || !isAuthenticated}
                            >
-                              <SelectTrigger className="mt-1">
-                                 <SelectValue
-                                    placeholder={isLoadingCalendars ? "Cargando..." : isAuthenticated ? "Seleccionar" : "No autenticado"}
-                                 />
+                              <SelectTrigger>
+                                 {(!isAuthenticated && "Inicia sesión para ver calendarios") ||
+                                    (isLoadingCalendars && "Cargando calendarios...") ||
+                                    (availableCalendars.length === 0 && "No hay calendarios disponibles") ||
+                                    availableCalendars.find((c) => c.id === task.calendarId)?.name ||
+                                    "Selecciona un calendario"}
                               </SelectTrigger>
                               <SelectContent>
-                                 {userCalendars.map((cal) => (
-                                    <SelectItem key={cal.id} value={cal.id}>
-                                       <div className="flex items-center gap-2">
-                                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: cal.backgroundColor }} />
-                                          {cal.summary} {cal.primary && "(Principal)"}
-                                       </div>
-                                    </SelectItem>
-                                 ))}
+                                 {isAuthenticated &&
+                                    !isLoadingCalendars &&
+                                    availableCalendars.map((calendar) => (
+                                       <SelectItem key={calendar.id} value={calendar.id}>
+                                          <div className="flex items-center gap-2">
+                                             {calendar.color && (
+                                                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: calendar.color }} />
+                                             )}
+                                             {calendar.name}
+                                          </div>
+                                       </SelectItem>
+                                    ))}
+                                 {/* Opcional: mostrar mensaje si no hay calendarios o no está autenticado */}
+                                 {isAuthenticated && !isLoadingCalendars && availableCalendars.length === 0 && (
+                                    <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                                       No se encontraron calendarios o no tienes permisos de escritura.
+                                    </div>
+                                 )}
                               </SelectContent>
                            </Select>
                         </div>

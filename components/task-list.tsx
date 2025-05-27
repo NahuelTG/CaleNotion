@@ -8,15 +8,7 @@ import type { TaskListProps, Task } from "../interfaces/tasks.interface";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Clock, CalendarIcon, Trash2, CheckCircle } from "lucide-react";
-
-// Definición de calendarios disponibles (en una implementación real, esto vendría de la API)
-const calendars = [
-   { id: "primary", name: "Calendario principal", color: "#4285F4" },
-   { id: "work", name: "Trabajo", color: "#0F9D58" },
-   { id: "personal", name: "Personal", color: "#F4B400" },
-   { id: "family", name: "Familia", color: "#DB4437" },
-];
+import { Clock, CalendarIcon as CalendarIconLucide, Trash2, CheckCircle } from "lucide-react";
 
 export function TaskList({ tasks, onRemoveTask }: TaskListProps) {
    if (tasks.length === 0) {
@@ -35,12 +27,6 @@ export function TaskList({ tasks, onRemoveTask }: TaskListProps) {
    // Ordenar las fechas
    const sortedDates = Object.keys(tasksByDate).sort();
 
-   // Función para obtener información del calendario
-   const getCalendarInfo = (calendarId?: string) => {
-      if (!calendarId) return null;
-      return calendars.find((cal) => cal.id === calendarId) || { name: calendarId, color: "#9AA0A6" };
-   };
-
    return (
       <div className="space-y-6">
          {sortedDates.map((date) => {
@@ -52,7 +38,7 @@ export function TaskList({ tasks, onRemoveTask }: TaskListProps) {
             return (
                <div key={date} className="space-y-3">
                   <h3 className="font-medium flex items-center">
-                     <CalendarIcon className="h-4 w-4 mr-2" />
+                     <CalendarIconLucide className="h-4 w-4 mr-2" />
                      {format(dateObj, "EEEE, d 'de' MMMM 'de' yyyy", { locale: es })}
                   </h3>
 
@@ -61,13 +47,8 @@ export function TaskList({ tasks, onRemoveTask }: TaskListProps) {
                         const startTimeObj = parse(task.startTime, "HH:mm", new Date());
                         const endTimeObj = addMinutes(startTimeObj, task.duration);
                         const endTime = format(endTimeObj, "HH:mm");
-
-                        // Calcular la hora de inicio de la siguiente tarea (incluyendo el descanso)
                         const nextTaskStartObj = addMinutes(endTimeObj, task.breakAfter);
                         const nextTaskStart = format(nextTaskStartObj, "HH:mm");
-
-                        // Obtener información del calendario
-                        const calendarInfo = getCalendarInfo(task.calendarId);
 
                         return (
                            <Card key={task.id} className="overflow-hidden">
@@ -85,17 +66,24 @@ export function TaskList({ tasks, onRemoveTask }: TaskListProps) {
                                                 Sincronizado
                                              </Badge>
                                           )}
-                                          {calendarInfo && (
+                                          {/* Usar directamente task.calendarName y task.calendarColor */}
+                                          {task.calendarName && task.calendarColor && (
                                              <Badge
                                                 variant="outline"
                                                 className="flex items-center gap-1"
                                                 style={{
-                                                   borderColor: `${calendarInfo.color}40`,
-                                                   backgroundColor: `${calendarInfo.color}10`,
-                                                   color: calendarInfo.color,
+                                                   borderColor: `${task.calendarColor}40`, // Opacidad 40 (25%)
+                                                   backgroundColor: `${task.calendarColor}1A`, // Opacidad 1A (10%)
+                                                   color: task.calendarColor,
                                                 }}
                                              >
-                                                {calendarInfo.name}
+                                                {task.calendarName}
+                                             </Badge>
+                                          )}
+                                          {/* Si quieres un fallback si no hay color/nombre: */}
+                                          {task.calendarId && !task.calendarName && (
+                                             <Badge variant="secondary">
+                                                {task.calendarId === "primary" ? "Calendario Principal" : task.calendarId}
                                              </Badge>
                                           )}
                                        </div>

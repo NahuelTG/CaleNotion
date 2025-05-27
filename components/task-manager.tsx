@@ -58,26 +58,47 @@ export function TaskManager() {
          if (isAuthenticated) {
             setIsLoadingCalendars(true);
             try {
-               const response = await fetch("/api/google-calendar/calendars");
+               const response = await fetch("/api/calendar"); // Asumiendo que esta URL es correcta y no da 404
                if (!response.ok) {
-                  const errorResult = await response.json();
-                  throw new Error(errorResult.error || `Error ${response.status} fetching calendars`);
+                  // ... tu manejo de error ...
+                  let errorBodyText = await response.text();
+                  try {
+                     const errorResult = JSON.parse(errorBodyText);
+                     throw new Error(errorResult.error || errorResult.message || `Error ${response.status} fetching calendars`);
+                  } catch (e) {
+                     throw new Error(`Error ${response.status} fetching calendars: ${errorBodyText.substring(0, 100)}`);
+                  }
                }
-               const calendarsData: CalendarItem[] = await response.json();
-               setAvailableCalendars(calendarsData);
-               // Opcional: seleccionar uno por defecto si es necesario
-               // if (calendarsData.length > 0) {
-               //   const primary = calendarsData.find(c => c.primary) || calendarsData[0];
-               //   setSelectedCalendarId(primary.id);
-               // }
+
+               const responseObject = await response.json(); // Esto es { calendars: Array(...) }
+               console.log("TaskManager: Response object from API:", responseObject);
+
+               // VERIFICA ESTA LÓGICA DETENIDAMENTE
+               if (
+                  responseObject &&
+                  typeof responseObject === "object" &&
+                  responseObject.calendars &&
+                  Array.isArray(responseObject.calendars)
+               ) {
+                  // SI responseObject es { calendars: [...] }, entonces usa responseObject.calendars
+                  setAvailableCalendars(responseObject.calendars as CalendarItem[]);
+                  console.log("TaskManager: setAvailableCalendars con responseObject.calendars");
+               } else if (Array.isArray(responseObject)) {
+                  // SI responseObject es directamente el array [...] (poco probable según tu log)
+                  setAvailableCalendars(responseObject as CalendarItem[]);
+                  console.log("TaskManager: setAvailableCalendars con responseObject (array directo)");
+               } else {
+                  console.warn("TaskManager: Formato de datos de calendarios inesperado o nulo:", responseObject);
+                  setAvailableCalendars([]); // Asegura que sea un array vacío en caso de error/formato incorrecto
+               }
             } catch (error: any) {
-               console.error("Error fetching user calendars:", error);
+               console.error("TaskManager: Error fetching user calendars:", error);
                toast({
                   title: "Error al cargar calendarios",
                   description: error.message,
                   variant: "destructive",
                });
-               setAvailableCalendars([]); // Resetea o maneja el error como prefieras
+               setAvailableCalendars([]); // Fallback a array vacío
             } finally {
                setIsLoadingCalendars(false);
             }
@@ -90,10 +111,12 @@ export function TaskManager() {
    }, [isAuthenticated, toast]);
 
    const addTask = (taskData: Omit<Task, "id" | "synced" | "googleEventId">) => {
+      // taskData ahora incluye calendarName y calendarColor
       const newTask: Task = {
-         ...taskData,
+         ...taskData, // Esto ya copiará calendarName y calendarColor si vienen de TaskForm
          id: `local-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
          synced: false,
+         // googleEventId se establecerá después de la sincronización
       };
       setTasks((prevTasks) => [...prevTasks, newTask]);
       toast({ title: "Tarea agregada", description: "Recuerda sincronizarla con Google Calendar." });
@@ -170,7 +193,7 @@ export function TaskManager() {
       });
 
       try {
-         const response = await fetch("/api/google-calendar/create-events", {
+         const response = await fetch("/api/calendar/create-events", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ events: eventsForAPI }),
@@ -183,7 +206,7 @@ export function TaskManager() {
          }
          return { success: true, ...apiResult };
       } catch (error: any) {
-         console.error("Error llamando a /api/google-calendar/create-events:", error);
+         console.error("Error llamando a /api/calendar/create-events:", error);
          toast({ title: "Error de Sincronización", description: error.message, variant: "destructive" });
          return {
             success: false,
@@ -298,10 +321,16 @@ export function TaskManager() {
 
    return (
       <Tabs defaultValue="tasks" className="w-full">
-         <TabsList className="grid w-full grid-cols-3 mb-6">
-            <TabsTrigger value="import">Importar Tareas</TabsTrigger>
-            <TabsTrigger value="tasks">Mis Tareas</TabsTrigger>
-            <TabsTrigger value="add">Agregar Tarea</TabsTrigger>
+         <TabsList className="grid w-full grid-cols-3 mb-6 ">
+            <TabsTrigger className="sm:text-base text-xs whitespace-normal" value="import">
+               Importar Tareas
+            </TabsTrigger>
+            <TabsTrigger className="sm:text-base text-xs whitespace-normal" value="tasks">
+               Mis Tareas
+            </TabsTrigger>
+            <TabsTrigger className="sm:text-base text-xs whitespace-normal" value="add">
+               Agregar Tarea
+            </TabsTrigger>
          </TabsList>
 
          <TabsContent value="tasks">
@@ -309,11 +338,11 @@ export function TaskManager() {
                <CardHeader>
                   <CardTitle className="flex flex-wrap justify-between items-center gap-2">
                      <span>Tareas Programadas</span>
-                     <div className="flex gap-2 items-center">
-                        <GoogleAuthButton />
+                     <div className="flex flex-wrap gap-2 items-center">
                         {isAuthenticated && (
                            <Button
                               variant="outline"
+                              className="sm:text-base text-sm"
                               size="sm"
                               onClick={handleGeneralSync}
                               disabled={isSyncing || tasks.filter((t) => !t.synced && !t.googleEventId).length === 0}
@@ -324,6 +353,7 @@ export function TaskManager() {
                                  : `Sincronizar (${tasks.filter((t) => !t.synced && !t.googleEventId).length})`}
                            </Button>
                         )}
+                        <GoogleAuthButton />
                      </div>
                   </CardTitle>
                </CardHeader>
@@ -360,6 +390,8 @@ export function TaskManager() {
                      onProcessAndSyncTasks={handleBulkImportAndSync}
                      isAuthenticated={isAuthenticated}
                      defaultBreakTime={defaultBreakTime}
+                     availableCalendars={availableCalendars} // <--- NUEVO
+                     isLoadingCalendars={isLoadingCalendars} // <--- NUEVO
                      onUpdateDefaultBreakTime={updateDefaultBreakTime}
                   />
                </CardContent>

@@ -14,15 +14,7 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { CalendarItem, TaskFormPropsFromParent } from "../interfaces/tasks.interface";
-
-// Definición de calendarios disponibles (en una implementación real, esto vendría de la API)
-const calendars = [
-   { id: "primary", name: "Calendario principal", color: "#4285F4" },
-   { id: "work", name: "Trabajo", color: "#0F9D58" },
-   { id: "personal", name: "Personal", color: "#F4B400" },
-   { id: "family", name: "Familia", color: "#DB4437" },
-];
+import type { TaskFormPropsFromParent } from "../interfaces/tasks.interface";
 
 export function TaskForm({
    onAddTask,
@@ -55,7 +47,13 @@ export function TaskForm({
    const handleSubmit = (e: React.FormEvent) => {
       e.preventDefault();
 
-      if (!title || !date) return;
+      if (!title || !date || !selectedCalendarId) {
+         console.warn("Por favor, completa todos los campos requeridos, incluyendo el calendario.");
+         return;
+      }
+      const selectedCalendar = Array.isArray(availableCalendars)
+         ? availableCalendars.find((cal) => cal.id === selectedCalendarId)
+         : undefined;
 
       onAddTask({
          title,
@@ -65,6 +63,8 @@ export function TaskForm({
          date: format(date, "yyyy-MM-dd"),
          startTime,
          calendarId: selectedCalendarId,
+         calendarName: selectedCalendar?.name,
+         calendarColor: selectedCalendar?.color,
       });
 
       // Resetear el formulario
@@ -150,19 +150,35 @@ export function TaskForm({
 
          <div className="space-y-2">
             <Label htmlFor="calendar">Calendario</Label>
-            <Select value={selectedCalendarId} onValueChange={setSelectedCalendarId}>
+            <Select
+               value={selectedCalendarId}
+               onValueChange={setSelectedCalendarId}
+               disabled={!isAuthenticated || isLoadingCalendars || availableCalendars.length === 0}
+            >
                <SelectTrigger>
-                  <SelectValue placeholder="Selecciona un calendario" />
+                  {(!isAuthenticated && "Inicia sesión para ver calendarios") ||
+                     (isLoadingCalendars && "Cargando calendarios...") ||
+                     (availableCalendars.length === 0 && "No hay calendarios disponibles") ||
+                     availableCalendars.find((c) => c.id === selectedCalendarId)?.name ||
+                     "Selecciona un calendario"}
                </SelectTrigger>
                <SelectContent>
-                  {calendars.map((calendar) => (
-                     <SelectItem key={calendar.id} value={calendar.id}>
-                        <div className="flex items-center gap-2">
-                           <div className="w-3 h-3 rounded-full" style={{ backgroundColor: calendar.color }} />
-                           {calendar.name}
-                        </div>
-                     </SelectItem>
-                  ))}
+                  {isAuthenticated &&
+                     !isLoadingCalendars &&
+                     availableCalendars.map((calendar) => (
+                        <SelectItem key={calendar.id} value={calendar.id}>
+                           <div className="flex items-center gap-2">
+                              {calendar.color && <div className="w-3 h-3 rounded-full" style={{ backgroundColor: calendar.color }} />}
+                              {calendar.name}
+                           </div>
+                        </SelectItem>
+                     ))}
+                  {/* Opcional: mostrar mensaje si no hay calendarios o no está autenticado */}
+                  {isAuthenticated && !isLoadingCalendars && availableCalendars.length === 0 && (
+                     <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                        No se encontraron calendarios o no tienes permisos de escritura.
+                     </div>
+                  )}
                </SelectContent>
             </Select>
          </div>
