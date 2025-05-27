@@ -321,10 +321,16 @@ export function TaskManager() {
 
    return (
       <Tabs defaultValue="tasks" className="w-full">
-         <TabsList className="grid w-full grid-cols-3 mb-6">
-            <TabsTrigger value="import">Importar Tareas</TabsTrigger>
-            <TabsTrigger value="tasks">Mis Tareas</TabsTrigger>
-            <TabsTrigger value="add">Agregar Tarea</TabsTrigger>
+         <TabsList className="grid w-full grid-cols-3 mb-6 ">
+            <TabsTrigger className="sm:text-base text-xs whitespace-normal" value="import">
+               Importar Tareas
+            </TabsTrigger>
+            <TabsTrigger className="sm:text-base text-xs whitespace-normal" value="tasks">
+               Mis Tareas
+            </TabsTrigger>
+            <TabsTrigger className="sm:text-base text-xs whitespace-normal" value="add">
+               Agregar Tarea
+            </TabsTrigger>
          </TabsList>
 
          <TabsContent value="tasks">
