@@ -5,6 +5,7 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from "@/components/theme-provider";
 import Providers from "./providers";
+import PWAInstallPrompt from "@/components/PWAInstallPrompt";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
@@ -49,6 +50,7 @@ export default function RootLayout({
                <Providers>{children}</Providers>
                <Toaster />
             </ThemeProvider>
+            <PWAInstallPrompt />
          </body>
       </html>
    );
