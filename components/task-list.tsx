@@ -80,12 +80,6 @@ export function TaskList({ tasks, onRemoveTask }: TaskListProps) {
                                                 {task.calendarName}
                                              </Badge>
                                           )}
-                                          {/* Si quieres un fallback si no hay color/nombre: */}
-                                          {task.calendarId && !task.calendarName && (
-                                             <Badge variant="secondary">
-                                                {task.calendarId === "primary" ? "Calendario Principal" : task.calendarId}
-                                             </Badge>
-                                          )}
                                        </div>
 
                                        {task.description && <p className="text-sm text-muted-foreground">{task.description}</p>}
